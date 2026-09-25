@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "pnpm build && node dist/main.js",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",

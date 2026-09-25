@@ -253,8 +253,12 @@ DOCKER_HOST=unix://$HOME/.colima/default/docker.sock docker-compose ps
 
 ```bash
 DOCKER_HOST=unix://$HOME/.colima/default/docker.sock \
-  make COMPOSE=docker-compose up
+  make up
 ```
+
+Makefile 会自动选择 `docker compose` 或 `docker-compose`；如需强制指定，仍可传入
+`COMPOSE=docker-compose`。Colima 默认只共享用户目录，因此请将仓库克隆到
+`$HOME` 下（例如 `$HOME/workspace/out-brain`），不要从 `/tmp` 启动挂载了本地文件的服务。
 
 ### 6.4 日志
 

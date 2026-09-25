@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-COMPOSE ?= docker compose
+COMPOSE ?= $(shell if docker compose version >/dev/null 2>&1; then printf 'docker compose'; elif command -v docker-compose >/dev/null 2>&1; then printf 'docker-compose'; else printf 'docker compose'; fi)
 
 .PHONY: help setup up down reset ps logs build typecheck test integration e2e verify
 
