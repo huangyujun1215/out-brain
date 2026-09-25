@@ -1,0 +1,6 @@
+<script setup lang="ts">
+import { ref } from "vue"; import { useRouter } from "vue-router"; import { Sparkles } from "lucide-vue-next"; import { useAuthStore } from "../stores/auth";
+const username = ref(""); const password = ref(""); const register = ref(false); const loading = ref(false); const error = ref(""); const auth = useAuthStore(); const router = useRouter();
+async function submit() { loading.value = true; error.value = ""; try { await auth.login(username.value, password.value, register.value); router.push("/"); } catch (e) { error.value = e instanceof Error ? e.message : "登录失败"; } finally { loading.value = false; } }
+</script>
+<template><div class="login-page"><div class="login-card"><div class="login-logo"><Sparkles/> NBBOSS</div><h1>{{ register ? '创建账号' : '欢迎回来' }}</h1><p>你的企业 AI 决策外脑</p><form @submit.prevent="submit"><label>用户名<input v-model="username" autocomplete="username" placeholder="3-32 个字符"/></label><label>密码<input v-model="password" type="password" :autocomplete="register ? 'new-password' : 'current-password'" placeholder="至少 8 位"/></label><p v-if="error" class="error">{{ error }}</p><button class="primary" :disabled="loading">{{ loading ? '请稍候…' : register ? '注册并登录' : '登录' }}</button></form><button class="link" @click="register = !register">{{ register ? '已有账号？登录' : '没有账号？立即注册' }}</button></div></div></template>

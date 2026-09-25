@@ -1,0 +1,375 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+enum ConversationMode {
+  CHAT
+  MEETING
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+  TOOL
+}
+
+enum MessageStatus {
+  PENDING
+  STREAMING
+  COMPLETED
+  FAILED
+  ABORTED
+}
+
+enum FileKind {
+  PDF
+  TXT
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  ABORTED
+  INTERRUPTED
+}
+
+enum TodoStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MemoryType {
+  PERSON
+  TIME
+  LOCATION
+  TOPIC
+  RELATION
+}
+
+enum DeliveryStatus {
+  DISABLED
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PresentationStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique @db.VarChar(64)
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  conversations Conversation[]
+  refreshTokens RefreshToken[]
+  todos         Todo[]
+  memories      MemoryEntity[]
+  agentRuns     AgentRun[]
+  files         FileAsset[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Conversation {
+  id            String              @id @default(uuid())
+  userId        String
+  mode          ConversationMode
+  title         String              @db.VarChar(100)
+  meetingStatus ProcessingStatus?
+  meetingErrorMessage String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      Message[]
+  files         FileAsset[]
+  meetings      Meeting[]
+  presentations Presentation[]
+  runs          AgentRun[]
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String        @db.Text
+  status         MessageStatus @default(COMPLETED)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  searchRuns     SearchRun[]
+  @@index([conversationId, createdAt])
+}
+
+model AgentRun {
+  id             String        @id @default(uuid())
+  userId         String
+  conversationId String
+  status         RunStatus     @default(PENDING)
+  model          String
+  startedAt      DateTime?
+  endedAt        DateTime?
+  abortReason    String?
+  errorCode      String?
+  inputTokens    Int           @default(0)
+  outputTokens   Int           @default(0)
+  cacheReadTokens Int          @default(0)
+  cacheWriteTokens Int         @default(0)
+  durationMs     Int?
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events         AgentEvent[]
+  tools          ToolExecution[]
+  @@index([userId, conversationId, createdAt])
+  createdAt      DateTime      @default(now())
+}
+
+model AgentEvent {
+  id        String   @id @default(uuid())
+  runId     String
+  sequence  Int
+  eventType String
+  payload   Json?
+  createdAt DateTime @default(now())
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@unique([runId, sequence])
+}
+
+model ToolExecution {
+  id         String    @id @default(uuid())
+  runId      String
+  toolCallId String
+  toolName   String
+  arguments  Json?
+  result     Json?
+  status     String
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+  run        AgentRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@unique([runId, toolCallId])
+}
+
+model FileAsset {
+  id             String           @id @default(uuid())
+  userId         String
+  conversationId String
+  kind           FileKind
+  originalName   String
+  storagePath    String
+  mimeType       String
+  size           Int
+  sha256         String
+  status         ProcessingStatus @default(PENDING)
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  pages          DocumentPage[]
+  chunks         DocumentChunk[]
+  meetingDocs    MeetingDocument[]
+  @@index([userId, conversationId])
+  @@index([sha256])
+}
+
+model DocumentPage {
+  id       String    @id @default(uuid())
+  fileId   String
+  pageNo   Int
+  text     String    @db.Text
+  file     FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  @@unique([fileId, pageNo])
+}
+
+model DocumentChunk {
+  id        String    @id @default(uuid())
+  fileId    String
+  pageStart Int
+  pageEnd   Int
+  charStart Int
+  charEnd   Int
+  content   String    @db.Text
+  tokenCount Int
+  embedding Unsupported("vector")?
+  file      FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  @@index([fileId])
+}
+
+model Meeting {
+  id             String      @id @default(uuid())
+  conversationId String
+  title          String
+  occurredAt     DateTime?
+  location       String?
+  analysis       Json
+  analysisVersion Int        @default(1)
+  status         ProcessingStatus @default(READY)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  documents      MeetingDocument[]
+  risks          Risk[]
+  todos          Todo[]
+  emails         EmailDelivery[]
+}
+
+model MeetingDocument {
+  id           String    @id @default(uuid())
+  meetingId    String
+  fileId       String
+  groupingKey  String?
+  cacheKey     String
+  analysis     Json?
+  meeting      Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  file         FileAsset @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  @@unique([meetingId, fileId])
+}
+
+model Risk {
+  id          String       @id @default(uuid())
+  meetingId   String
+  severity    RiskSeverity
+  description String       @db.Text
+  evidence    Json
+  createdAt   DateTime     @default(now())
+  meeting     Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  todos       Todo[]
+}
+
+model Todo {
+  id          String     @id @default(uuid())
+  userId      String
+  meetingId   String
+  riskId      String?
+  title       String
+  description String     @db.Text
+  owner       String     @default("待确认")
+  dueAt       DateTime?
+  status      TodoStatus @default(PENDING)
+  aiGenerated Boolean    @default(true)
+  idempotencyKey String  @unique
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meeting     Meeting    @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  risk        Risk?      @relation(fields: [riskId], references: [id], onDelete: SetNull)
+  @@index([userId, status, dueAt])
+}
+
+model MemoryEntity {
+  id            String       @id @default(uuid())
+  userId        String
+  type          MemoryType
+  canonicalName String
+  createdAt     DateTime     @default(now())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facts         MemoryFact[]
+  @@unique([userId, type, canonicalName])
+}
+
+model MemoryFact {
+  id             String       @id @default(uuid())
+  entityId       String
+  attribute      String
+  value          String       @db.Text
+  confidence     Float        @default(0.7)
+  effectiveAt    DateTime?
+  sourceType     String
+  sourceId       String
+  observedAt     DateTime     @default(now())
+  userEdited     Boolean      @default(false)
+  supersededById String?      @unique
+  createdAt      DateTime     @default(now())
+  entity         MemoryEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  supersededBy   MemoryFact?  @relation("FactHistory", fields: [supersededById], references: [id])
+  supersedes     MemoryFact?  @relation("FactHistory")
+  @@index([entityId, attribute, createdAt])
+}
+
+model SearchRun {
+  id         String   @id @default(uuid())
+  messageId  String
+  query      String
+  searchedAt DateTime
+  sources    Json
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@index([messageId, searchedAt])
+}
+
+model Presentation {
+  id             String                @id @default(uuid())
+  conversationId String
+  title          String
+  requestedPrompt String               @db.Text
+  status         PresentationStatus    @default(PENDING)
+  progress       Int                   @default(0)
+  errorMessage   String?
+  idempotencyKey String?               @unique
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  conversation   Conversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  versions       PresentationVersion[]
+  @@index([conversationId, createdAt])
+}
+
+model PresentationVersion {
+  id             String       @id @default(uuid())
+  presentationId String
+  version        Int
+  prompt         String       @db.Text
+  slideJson      Json
+  pptxPath       String
+  previewMeta    Json?
+  createdAt      DateTime     @default(now())
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  @@unique([presentationId, version])
+}
+
+model EmailDelivery {
+  id              String         @id @default(uuid())
+  meetingId       String
+  recipientMasked String
+  status          DeliveryStatus
+  attempts        Int            @default(0)
+  errorCode       String?
+  sentAt          DateTime?
+  createdAt       DateTime       @default(now())
+  meeting         Meeting        @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+}

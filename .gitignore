@@ -1,0 +1,26 @@
+# Secrets and local overrides
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Dependencies and build/test output
+node_modules/
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+*.pid
+
+# Local runtime data
+data/
+uploads/
+tmp/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
